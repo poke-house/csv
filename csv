@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+  <meta charset="UTF-8" />
+  <title>Excel (várias abas) → 1 CSV combinado</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- SheetJS - lê XLS/XLSX no browser -->
+  <script
+    type="text/javascript"
+    src="https://cdn.sheetjs.com/xlsx-0.20.3/package/dist/xlsx.full.min.js">
+  </script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      max-width: 600px;
+      margin: 40px auto;
+      padding: 0 16px;
+      line-height: 1.4;
+    }
+    h1 {
+      font-size: 1.4rem;
+      margin-bottom: 0.5rem;
+    }
+    .card {
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      padding: 16px;
+      margin-top: 16px;
+    }
+    input[type="file"] {
+      margin-top: 8px;
+    }
+    .log {
+      margin-top: 12px;
+      font-size: 0.9rem;
+      white-space: pre-wrap;
+      background: #f7f7f7;
+      border-radius: 6px;
+      padding: 8px;
+      max-height: 250px;
+      overflow-y: auto;
+    }
+  </style>
+</head>
+<body>
+  <h1>Excel (várias abas) → 1 CSV combinado</h1>
+  <p>
+    Carrega um ficheiro Excel (.xls ou .xlsx) e gera um único
+    <strong>.csv</strong> com todas as abas, uma embaixo da outra,
+    na ordem original. Tudo é feito localmente no teu navegador.
+  </p>
+
+  <div class="card">
+    <label for="fileInput"><strong>Escolhe o ficheiro .xls ou .xlsx:</strong></label><br>
+    <input id="fileInput" type="file" accept=".xls,.xlsx" />
+    <div class="log" id="log">Nenhum ficheiro carregado ainda.</div>
+  </div>
+
+  <script>
+    const fileInput = document.getElementById("fileInput");
+    const logEl = document.getElementById("log");
+
+    function log(msg) {
+      logEl.textContent += "\n" + msg;
+    }
+
+    function clearLog() {
+      logEl.textContent = "";
+    }
+
+    fileInput.addEventListener("change", async (e) => {
+      const file = e.target.files[0];
+      if (!file) return;
+
+      clearLog();
+      log(`Ficheiro selecionado: ${file.name}`);
+      log("A ler o ficheiro...");
+
+      try {
+        const arrayBuffer = await file.arrayBuffer();
+
+        // Lê o workbook (todas as abas)
+        const workbook = XLSX.read(arrayBuffer, { type: "array" });
+        const sheetNames = workbook.SheetNames;
+
+        if (!sheetNames.length) {
+          log("Nenhuma aba encontrada no ficheiro.");
+          return;
+        }
+
+        log(`Foram encontradas ${sheetNames.length} abas.`);
+
+        const baseName = file.name.replace(/\.[^.]+$/, ""); // remove extensão
+        const combinedParts = [];
+
+        sheetNames.forEach((sheetName, idx) => {
+          const worksheet = workbook.Sheets[sheetName];
+
+          // Converte a aba para CSV
+          // Se preferir ; em vez de , troque para: { FS: ";" }
+          const csv = XLSX.utils.sheet_to_csv(worksheet /*, { FS: ";" } */);
+
+          // Cabeçalho separador para indicar de que aba são os dados
+          const headerLine = `"### ABA ${idx + 1}: ${sheetName} ###"`;
+
+          // Remove quebras de linha no fim para evitar espaço demais
+          const cleanedCsv = csv.trimEnd();
+
+          combinedParts.push(headerLine);
+          combinedParts.push(cleanedCsv);
+        });
+
+        // Junta tudo num único CSV, com linha em branco entre blocos
+        const finalCsv = combinedParts.join("\n\n");
+
+        // Faz download do único CSV combinado
+        const blob = new Blob([finalCsv], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `${baseName}_todas_as_abas_combinadas.csv`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+
+        log("\n✅ CSV combinado gerado e descarregado com sucesso!");
+        log("Todas as abas estão no mesmo ficheiro, separadas por linhas '### ABA ... ###'.");
+      } catch (err) {
+        console.error(err);
+        log("\n❌ Ocorreu um erro ao ler ou converter o ficheiro. Vê a consola do navegador para mais detalhes.");
+      }
+    });
+  </script>
+</body>
+</html>
